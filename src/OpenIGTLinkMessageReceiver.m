@@ -1,6 +1,6 @@
 % OpenIGTLink server that executes the received string commands
-function receiver = OpenIGTLinkMessageReceiver(sock, onRxStringMsg, onRxTransformMsg, onRxNDArrayMsg)
-    global onRxStringMessage onRxTransformMessage onRxNDArrayMessage;
+function receiver = OpenIGTLinkMessageReceiver(sock, onRxStringMsg, onRxTransformMsg, onRxImageMsg, onRxNDArrayMsg)
+    global onRxStringMessage onRxTransformMessage onRxImageMessage onRxNDArrayMessage;
     onRxStringMessage = onRxStringMsg;
     onRxTransformMessage = onRxTransformMsg;
     onRxImageMessage = onRxImageMsg;
@@ -72,7 +72,7 @@ function [name data] = handleImageMessage(msg, onRxStringMessage)
     body = msg.body;
     i=1;
     
-    versionNumber = uint8(body(i)); i = i + 1;
+    versionNumber = convertFromUint8VectorToUint16(body(i:i+1)); i = i + 2;
     numberOfComponents = uint8(body(i)); i = i + 1;
     scalarType = uint8(body(i)); i = i + 1; % 2:int8 3:uint8 4:int16 5:uint16 6:int32 7:uint32 10:float32 11:float64)
     endian = uint8(body(i)); i = i + 1; % 1:BIG 2:LITTLE
@@ -81,6 +81,10 @@ function [name data] = handleImageMessage(msg, onRxStringMessage)
     volumeSizeI = convertFromUint8VectorToUint16(body(i:i+1));i = i + 2;
     volumeSizeJ = convertFromUint8VectorToUint16(body(i:i+1));i = i + 2;
     volumeSizeK = convertFromUint8VectorToUint16(body(i:i+1));i = i + 2;
+    
+    volumeSizeI 
+    volumeSizeJ
+    volumeSizeK
     
     data.ijkToXyz = eye(4);
     
@@ -100,8 +104,8 @@ function [name data] = handleImageMessage(msg, onRxStringMessage)
     positionY = convertFromUint8VectorToFloat32(body(i:i+3));i = i + 4;
     positionZ = convertFromUint8VectorToFloat32(body(i:i+3));i = i + 4;
 
-    // Save the transform that is embedded in the IMAGE message into the tracked frame
-    // igtl origin is in the image center
+    % Save the transform that is embedded in the IMAGE message into the tracked frame
+    % igtl origin is in the image center
     centerOriginToCornerOriginTransform=eye(4);
     centerOriginToCornerOriginTransform(1:3,4) = [ -volumeSizeI/2; -volumeSizeJ/2; -volumeSizeK/2 ];
     data.ijkToXyz = data.ijkToXyz * centerOriginToCornerOriginTransform;
@@ -118,7 +122,7 @@ function [name data] = handleImageMessage(msg, onRxStringMessage)
     for kIndex=1:volumeSizeK
       for jIndex=1:volumeSizeJ
         for iIndex=1:volumeSizeI
-          data.pixelData(i,j,k) = convertFromUint8VectorToFloat64(body(i:i+8)); i = i + 8;
+          data.pixelData(iIndex,jIndex,kIndex) = convertFromUint8VectorToFloat64(body(i:i+8)); i = i + 8;
         end
       end
     end
@@ -127,7 +131,7 @@ function [name data] = handleImageMessage(msg, onRxStringMessage)
 end
 
 function handleNDArrayMessage(msg, onRxNDArrayMessage)
-  print("handleNDArrayMessage is not yet implemented");
+  print('handleNDArrayMessage is not yet implemented');
 end
 
 %%  Parse OpenIGTLink messag header
@@ -153,13 +157,14 @@ function msg=ReadOpenIGTLinkMessage()
     end
 end    
       
+
 function data=ReadWithTimeout(requestedDataLength, timeoutSec)
     import java.net.Socket
     import java.io.*
     import java.net.ServerSocket
-    
+
     global socket;
-    
+
     % preallocate to improve performance
     data=zeros(1,requestedDataLength,'uint8');
     signedDataByte=int8(0);
@@ -183,7 +188,7 @@ function data=ReadWithTimeout(requestedDataLength, timeoutSec)
             if signedDataByte>=0
                 data(i) = signedDataByte;
             else
-                data(i) = bitcmp(-signedDataByte,'uint8')+1;
+                data(i) = typecast(int8(signedDataByte),'uint8');
             end
         end            
         bytesRead=bytesRead+bytesToRead;
@@ -199,7 +204,6 @@ function data=ReadWithTimeout(requestedDataLength, timeoutSec)
         end
     end
 end
-
 
 function result=convertFromUint8VectorToUint16(uint8Vector)
   result=int32(uint8Vector(1))*256+int32(uint8Vector(2));
